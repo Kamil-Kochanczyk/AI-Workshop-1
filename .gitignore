@@ -1,0 +1,14 @@
+# This is where MVTecAD dataset should be
+datasets/
+
+# This is where the .ckpt files are stored
+models/
+
+# This is automatically generated when training and testing models
+results/
+
+# pycache
+src/__pycache__/
+
+# This is a cloned repository implementing the Growing Spheres algorithm
+growingspheres/
