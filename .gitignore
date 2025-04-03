@@ -9,6 +9,3 @@ results/
 
 # pycache
 src/__pycache__/
-
-# This is a cloned repository implementing the Growing Spheres algorithm
-growingspheres/

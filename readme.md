@@ -32,11 +32,9 @@ Categories:
 
 Model in patchcore_test.py for each chosen category should match the model that has been used in patchcore_train.py to train Patchcore on this category.
 
-Categories from bottle to hazelnut have been trained on wide_resnet50_2.
-Categories from leather to zipper have been trained on resnet18.
+Categories from bottle to hazelnut have been trained on wide_resnet50_2 (index 0).
+Categories from leather to zipper have been trained on resnet18 (index 1).
 
 Possible solution to permission error when training a given category: delete (if exists) the subdirectory corresponding to the given category from the results/Patchcore/MVTecAD/ directory.
 
 Omitted directories ---> .gitignore
-
-Current approach: training a model on a given category, deleting all generated files and directories except for the .ckpt file, copying/replacing .ckpt file in models/ directory, testing and predicting the trained model using the new .ckpt file.

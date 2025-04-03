@@ -7,6 +7,34 @@ from PIL import Image
 def get_categories():
     return ["bottle", "cable", "capsule", "carpet", "grid", "hazelnut", "leather", "metal_nut", "pill", "screw", "tile", "toothbrush", "transistor", "wood", "zipper"]
 
+def get_numpy_image(image_path, size=None):
+    # Returned array is of type uint8, with values between 0 and 255
+    # It can either be 2D (grayscale) or 3D (RGB), e.g. (256, 256) or (256, 256, 3)
+    try:
+        if size is None:
+            return np.array(Image.open(image_path))
+        else:
+            return np.array(Image.open(image_path).resize(size))
+    except Exception as e:
+        print(f"Failed to get image: {e}")
+        return None
+
+def save_numpy_image_as_png(numpy_image, output_path):
+    try:
+        Image.fromarray(numpy_image.astype(np.uint8)).save(output_path)
+        return True
+    except Exception as e:
+        print(f"Failed to save image: {e}")
+        return False
+
+def lerp_probabilities(pred_score):
+    # x coordinate - it's index 0 and corresponds to label False, value is probability of no anomaly
+    # y coordinate - it's index 1 and corresponds to label True, value is probability of anomaly
+    t = pred_score
+    a = np.array([1, 0])
+    b = np.array([0, 1])
+    return (1 - t) * a + t * b
+
 def get_default_visualization(tested_image_path):
     # Argument can be for example "...\\datasets\\MVTecAD\\bottle\\test\\broken_large\\000.png"
     split_path = tested_image_path.split("\\")
