@@ -175,21 +175,33 @@ class CounterfactualExplanationsWrapper:
         obs = numpy_image.reshape(1, -1)
         obs = obs / 255.0
 
-        cfe = gs.GSCFE(obs_to_interprete=obs, prediction_fn=self.predict_for_growing_spheres)
-        cfe.fit(caps=[0.0, 1.0], n_in_layer=50, layer_shape="ball", first_radius=100.0, dicrease_radius=2.0, sparse=True, verbose=True)
+        gscfe_obj = gs.GSCFE(
+            obs_to_interprete=obs,
+            prediction_fn=self.predict_for_growing_spheres,
+            target_class=self.cfe_desired_label,
+            caps=[0.0, 1.0],
+            n_in_layer=50,
+            layer_shape="ball",
+            first_radius=100.0,
+            dicrease_radius=2.0,
+            sparse=True,
+            verbose=True
+        )
 
-        if cfe.enemy is None:
+        cfe, cfe_sparse, displacement_from_obs = gscfe_obj.find_cfe()
+
+        if cfe is None:
             print()
             print("No counterfactual explanation found within given limits")
         else:
-            # if sparse=False, the next two variables will be the same
-            sparse_counterfactual_explanation = (cfe.enemy.reshape(1, -1).reshape(self.cfe_image_shape) * 255.0).astype("uint8")
-            counterfactual_explanation = (cfe.e_star.reshape(1, -1).reshape(self.cfe_image_shape) * 255.0).astype("uint8")
-            displacement_from_obs = (cfe.move.reshape(1, -1).reshape(self.cfe_image_shape) * 255.0).astype("uint8")
+            # if sparse=False, normal and sparse will be the same
+            cfe_sparse = (cfe_sparse.reshape(1, -1).reshape(self.cfe_image_shape) * 255.0).astype("uint8")
+            cfe = (cfe.reshape(1, -1).reshape(self.cfe_image_shape) * 255.0).astype("uint8")
+            displacement_from_obs = (displacement_from_obs.reshape(1, -1).reshape(self.cfe_image_shape) * 255.0).astype("uint8")
 
             print()
-            print(sparse_counterfactual_explanation.shape)
-            print(counterfactual_explanation.shape)
+            print(cfe_sparse.shape)
+            print(cfe.shape)
             print(displacement_from_obs.shape)
             print()
 
@@ -197,13 +209,13 @@ class CounterfactualExplanationsWrapper:
 
             if self.is_dataset_grayscale:
                 axs[0, 0].imshow(numpy_image, cmap="gray")
-                axs[0, 1].imshow(sparse_counterfactual_explanation, cmap="gray")
-                axs[1, 0].imshow(counterfactual_explanation, cmap="gray")
+                axs[0, 1].imshow(cfe_sparse, cmap="gray")
+                axs[1, 0].imshow(cfe, cmap="gray")
                 axs[1, 1].imshow(displacement_from_obs, cmap="gray")
             else:
                 axs[0, 0].imshow(numpy_image)
-                axs[0, 1].imshow(sparse_counterfactual_explanation)
-                axs[1, 0].imshow(counterfactual_explanation)
+                axs[0, 1].imshow(cfe_sparse)
+                axs[1, 0].imshow(cfe)
                 axs[1, 1].imshow(displacement_from_obs)
             
             axs[0, 0].set_title("Original image")
@@ -271,7 +283,7 @@ class CounterfactualExplanationsWrapper:
             else:
                 plt.imshow(mark_boundaries(numpy_image, segments))
             plt.show()
-            choice = input("Enter 0 to test other parameters, -1 to cancel, or anything else to accept and move on: ")
+            choice = input("Enter 0 to test other parameter values, -1 to cancel, or anything else to accept and move on: ")
             print()
             if choice == "0":
                 continue
@@ -285,7 +297,7 @@ class CounterfactualExplanationsWrapper:
             self.predict_for_sedc_t,
             segments,
             int(self.cfe_desired_label),    # look for the comment in my_lib.py for function lerp_probabilities
-            'blur'
+            "inpaint"
         )
 
         if explanation is None:
@@ -340,6 +352,5 @@ class CounterfactualExplanationsWrapper:
 
 if __name__ == "__main__":
     cfew = CounterfactualExplanationsWrapper("hazelnut", 0)
-    # cfew.loop()
-    cfew.perform_algorithm(100, "sedct")
+    cfew.loop()
     del cfew
