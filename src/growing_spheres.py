@@ -8,77 +8,33 @@ import time
 # https://github.com/thibaultlaugel/growingspheres/tree/master
 # https://hal.sorbonne-universite.fr/hal-01905982/file/180115_final.pdf
 
-def get_distances(x1, x2):
-    x1, x2 = x1.reshape(1, -1), x2.reshape(1, -1)
-    euclidean = pairwise_distances(x1, x2)[0][0]
-    same_coordinates = sum((x1 == x2)[0])
-    #pearson = pearsonr(x1, x2)[0]
-    kendall = kendalltau(x1, x2)
-    out_dict = {
-        'euclidean': euclidean,
-        'sparsity': x1.shape[1] - same_coordinates,
-        'kendall': kendall
-    }
-    return out_dict        
-
-def generate_ball(center, r, n):
-    def norm(v):
-        return np.linalg.norm(v, ord=2, axis=1)
-    d = center.shape[1]
-    u = np.random.normal(0, 1, (n, d + 2))    # an array of (d + 2) normally distributed random variables
-    u = 1 / (norm(u)[:, None]) * u
-    x = u[:, 0:d] * r    # take the first d coordinates
-    x = x + center
-    return x
-
-def generate_ring(center, segment, n):
-    def norm(v):
-        return np.linalg.norm(v, ord=2, axis=1)
-    d = center.shape[1]
-    z = np.random.normal(0, 1, (n, d))
-    try:
-        u = np.random.uniform(segment[0]**d, segment[1]**d, n)
-    except OverflowError:
-        raise OverflowError("Dimension too big for 'ring'. Please use 'ball' or 'sphere' instead.")
-    r = u**(1 / float(d))
-    z = np.array([a * b / c for a, b, c in zip(z, r, norm(z))])
-    z = z + center
-    return z
-
-def generate_sphere(center, r, n):    
-    def norm(v):
-        return np.linalg.norm(v, ord=2, axis=1)
-    d = center.shape[1]
-    z = np.random.normal(0, 1, (n, d))
-    z = z / (norm(z)[:, None]) * r + center
-    return z
-
 class GSCFE:
     def __init__(self, obs_to_interprete, prediction_fn, target_class=None, caps=None, n_in_layer=2000, layer_shape='ball', first_radius=0.1, dicrease_radius=10, sparse=True, verbose=False):
         """
-        obs_to_interprete: The data point (as a vector) for which we want to generate a counterfactual explanation.
+        Parameters:
+            obs_to_interprete: The data point (as a vector) for which we want to generate a counterfactual explanation.
 
-        prediction_fn: A function that accepts an input array, where rows are samples and columns are features, and returns an array of integers representing the predicted classes for rows from the input array.
+            prediction_fn: A function that accepts an input array, where rows are samples and columns are features, and returns an array of integers representing the predicted classes for rows from the input array.
 
-        caps: A tuple specifying the minimum and maximum allowed values for each feature.
+            caps: A tuple specifying the minimum and maximum allowed values for each feature.
 
-        target_class: The class label that we desire for the counterfactual instance. If set to None, the algorithm will simply search for any instance whose prediction differs from that of the original observation.
+            target_class: The class label that we desire for the counterfactual instance. If set to None, the algorithm will simply search for any instance whose prediction differs from that of the original observation.
 
-        n_in_layer: The number of candidate instances to generate at each iteration (or “layer”) of the search. A higher number increases the chances of finding a valid counterfactual but also increases computational cost.
+            n_in_layer: The number of candidate instances to generate at each iteration (or “layer”) of the search. A higher number increases the chances of finding a valid counterfactual but also increases computational cost.
 
-        layer_shape: Defines the geometric configuration used for sampling the candidate counterfactuals.
+            layer_shape: Defines the geometric configuration used for sampling the candidate counterfactuals.
 
-            'ball': Samples points within a full hyperball (solid sphere), covering the entire volume around the observation.
-            'ring': Samples points in a hollow spherical shell.
-            'sphere': Samples points strictly on the surface of a hypersphere.
-        
-        first_radius: The initial radius of the hyperball used to sample candidate points around the observation, it determines how close the initial search is to the observation.
+                'ball': Samples points within a full hyperball (solid sphere), covering the entire volume around the observation.
+                'ring': Samples points in a hollow spherical shell.
+                'sphere': Samples points strictly on the surface of a hypersphere.
+            
+            first_radius: The initial radius of the hyperball used to sample candidate points around the observation, it determines how close the initial search is to the observation.
 
-        dicrease_radius: A factor (greater than 1) that controls the rate at which the search radius is decreased (and then increased) during the exploration phase.
+            dicrease_radius: A factor (greater than 1) that controls the rate at which the search radius is decreased (and then increased) during the exploration phase.
 
-        sparse: A boolean flag indicating whether to perform feature selection after finding a candidate counterfactual. When True, the algorithm attempts to reduce the number of features changed from the original observation.
+            sparse: A boolean flag indicating whether to perform feature selection after finding a candidate counterfactual. When True, the algorithm attempts to reduce the number of features changed from the original observation.
 
-        verbose: Prints progress messages.
+            verbose: Prints progress messages.
         """
         
         self.obs_to_interprete = obs_to_interprete
@@ -191,15 +147,15 @@ class GSCFE:
         """
 
         if first_layer:
-            layer = generate_ball(self.obs_to_interprete, radius, n)
+            layer = GSCFE.generate_ball(self.obs_to_interprete, radius, n)
         else:
             if self.layer_shape == 'ball':
-                layer = generate_ball(self.obs_to_interprete, radius + step, n)
+                layer = GSCFE.generate_ball(self.obs_to_interprete, radius + step, n)
             elif self.layer_shape == 'ring':
                 segment = (radius, radius + step)
-                layer = generate_ring(self.obs_to_interprete, segment, n)
+                layer = GSCFE.generate_ring(self.obs_to_interprete, segment, n)
             elif self.layer_shape == 'sphere':
-                layer = generate_sphere(self.obs_to_interprete, radius + step, n)
+                layer = GSCFE.generate_sphere(self.obs_to_interprete, radius + step, n)
 
         if caps != None:
             caps_fn = lambda x: min(max(x, caps[0]), caps[1])
@@ -258,3 +214,52 @@ class GSCFE:
             print(f"Feature selection ended. Reduced {reduced} coordinates.")
         
         return out
+    
+    @staticmethod
+    def get_distances(x1, x2):
+        x1, x2 = x1.reshape(1, -1), x2.reshape(1, -1)
+        euclidean = pairwise_distances(x1, x2)[0][0]
+        same_coordinates = sum((x1 == x2)[0])
+        #pearson = pearsonr(x1, x2)[0]
+        kendall = kendalltau(x1, x2)
+        out_dict = {
+            'euclidean': euclidean,
+            'sparsity': x1.shape[1] - same_coordinates,
+            'kendall': kendall
+        }
+        return out_dict        
+
+    @staticmethod
+    def generate_ball(center, r, n):
+        def norm(v):
+            return np.linalg.norm(v, ord=2, axis=1)
+        d = center.shape[1]
+        u = np.random.normal(0, 1, (n, d + 2))    # an array of (d + 2) normally distributed random variables
+        u = 1 / (norm(u)[:, None]) * u
+        x = u[:, 0:d] * r    # take the first d coordinates
+        x = x + center
+        return x
+
+    @staticmethod
+    def generate_ring(center, segment, n):
+        def norm(v):
+            return np.linalg.norm(v, ord=2, axis=1)
+        d = center.shape[1]
+        z = np.random.normal(0, 1, (n, d))
+        try:
+            u = np.random.uniform(segment[0]**d, segment[1]**d, n)
+        except OverflowError:
+            raise OverflowError("Dimension too big for 'ring'. Please use 'ball' or 'sphere' instead.")
+        r = u**(1 / float(d))
+        z = np.array([a * b / c for a, b, c in zip(z, r, norm(z))])
+        z = z + center
+        return z
+
+    @staticmethod
+    def generate_sphere(center, r, n):    
+        def norm(v):
+            return np.linalg.norm(v, ord=2, axis=1)
+        d = center.shape[1]
+        z = np.random.normal(0, 1, (n, d))
+        z = z / (norm(z)[:, None]) * r + center
+        return z

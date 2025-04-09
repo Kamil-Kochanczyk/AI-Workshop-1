@@ -12,11 +12,13 @@ import matplotlib.pyplot as plt
 import tempfile
 import os
 
-from my_lib import get_numpy_image, save_numpy_image_as_png, lerp_probabilities, is_correct_prediction
-from my_lib import summarize_predictions, visualize_prediction
+from my_lib import get_numpy_image, get_numpy_images, save_numpy_image_as_png
+from my_lib import lerp_probabilities
+from my_lib import is_correct_prediction, summarize_predictions, visualize_prediction
 
 import growing_spheres as gs
 import sedc_t as sedct
+import face as face
 
 # def test():
 #     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -82,6 +84,7 @@ class CounterfactualExplanationsWrapper:
         self.algorithm_wrappers = {
             "gs": self.growing_spheres,
             "sedct": self.sedc_t,
+            "face": self.face
         }
 
     def __del__(self):
@@ -101,8 +104,8 @@ class CounterfactualExplanationsWrapper:
                     if choice == "v":
                         visualize_prediction(self.predictions[index])
                     elif choice == "cfe":
-                        algorithm = input("Choose algorithm\ngs - Growing Spheres, sedct - SEDC-T: ").strip().lower()
-                        if algorithm in ["gs", "sedct"]:
+                        algorithm = input("Choose algorithm\ngs - Growing Spheres, sedct - SEDC-T, face - FACE: ").strip().lower()
+                        if algorithm in ["gs", "sedct", "face"]:
                             print()
                             self.perform_algorithm(index, algorithm)
                         else:
@@ -293,11 +296,11 @@ class CounterfactualExplanationsWrapper:
                 break
 
         explanation, segments_in_explanation, perturbation, new_class = sedct.SEDCTCFE.sedc_t(
-            numpy_image,
-            self.predict_for_sedc_t,
-            segments,
-            int(self.cfe_desired_label),    # look for the comment in my_lib.py for function lerp_probabilities
-            "inpaint"
+            image=numpy_image,
+            predict_fn=self.predict_for_sedc_t,
+            segments=segments,
+            target_class=int(self.cfe_desired_label),    # look for the comment in my_lib.py for function lerp_probabilities
+            mode="inpaint"
         )
 
         if explanation is None:
@@ -349,8 +352,81 @@ class CounterfactualExplanationsWrapper:
         )[0]
 
         return lerp_probabilities(prediction.pred_score.item())
+    
+    def face(self, numpy_image):
+        print("Starting FACE...")
+        print()
+
+        train_images_dir = f"./datasets/MVTecAD/{self.category}/train/good"
+        train_images_paths = [os.path.join(train_images_dir, img) for img in os.listdir(train_images_dir) if img.endswith(".png")]
+        train_images = get_numpy_images(train_images_paths, self.cfe_image_res)
+        X_train = list(map(lambda x: (x / 255.0).reshape(1, -1), train_images))
+
+        distance_computer = face.DistanceComputer()
+        pdf_estimator = face.PDFEstimator(distance_computer=distance_computer, bandwidth=0.25, kernel="tophat")
+        feasibility_set = face.FeasibilitySet()
+
+        # Experiment with other parameter values of pdf_estimator as those above work poorly (they lead to overflows and infinite values)
+
+        n_train = int(len(X_train))
+
+        facecfe = face.FACECFE(
+            X_train=X_train,
+            predict_fn=self.predict_for_face,
+            distance_computer=distance_computer,
+            pdf_estimator=pdf_estimator,
+            feasibility_set=feasibility_set,
+            epsilon=float("inf"),
+            tp=0.5,
+            td=0.001
+        )
+
+        cfe, cfe_path_cost, cfe_path = facecfe.get_cfe((numpy_image / 255.0).reshape(1, -1))
+
+        cfe = (cfe.reshape(self.cfe_image_shape) * 255.0).astype("uint8")
+
+        print(f"{cfe.shape}, {cfe.min()}, {cfe.max()}")
+
+        print()
+        print(f"cfe_path_cost: {cfe_path_cost}")
+        print(f"cfe_path (indexes of images) (0th index isn't important, it's random): {cfe_path}")
+        print()
+
+        fig, axs = plt.subplots(1, 2, figsize=(16, 8))
+
+        if self.is_dataset_grayscale:
+            axs[0].imshow(numpy_image, cmap="gray")
+            axs[1].imshow((cfe * 255.0).astype("uint8"), cmap="gray")
+        else:
+            axs[0].imshow(numpy_image)
+            axs[1].imshow((cfe * 255.0).astype("uint8"))
+            
+            axs[0].set_title("Original image")
+            axs[0].axis("off")
+
+            axs[1].set_title("Counterfactual Explanation")
+            axs[1].axis("off")
+
+            plt.tight_layout()
+            plt.show()     
+    
+    def predict_for_face(self, np_img_row):
+        img = (np_img_row * 255.0).astype("uint8")
+        save_numpy_image_as_png(img.reshape(self.cfe_image_shape), self.tmp_path)
+
+        prediction = self.engine.predict(
+            model=self.model,
+            dataset=self.tmp_dataset,
+            ckpt_path=self.ckpt_path
+        )[0]
+
+        label = prediction.pred_label.item()
+        probabilities = lerp_probabilities(prediction.pred_score.item())
+
+        return label, probabilities
 
 if __name__ == "__main__":
     cfew = CounterfactualExplanationsWrapper("hazelnut", 0)
     cfew.loop()
+    # cfew.perform_algorithm(21, "face")
     del cfew

@@ -19,6 +19,14 @@ def get_numpy_image(image_path, size=None):
         print(f"Failed to get image: {e}")
         return None
 
+def get_numpy_images(image_paths, size=None):
+    images = []
+    for image_path in image_paths:
+        image = get_numpy_image(image_path, size)
+        if image is not None:
+            images.append(image)
+    return images
+
 def save_numpy_image_as_png(numpy_image, output_path):
     try:
         Image.fromarray(numpy_image.astype(np.uint8)).save(output_path)
