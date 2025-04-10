@@ -396,10 +396,10 @@ class CounterfactualExplanationsWrapper:
 
         if self.is_dataset_grayscale:
             axs[0].imshow(numpy_image, cmap="gray")
-            axs[1].imshow((cfe * 255.0).astype("uint8"), cmap="gray")
+            axs[1].imshow(cfe, cmap="gray")
         else:
             axs[0].imshow(numpy_image)
-            axs[1].imshow((cfe * 255.0).astype("uint8"))
+            axs[1].imshow(cfe)
             
             axs[0].set_title("Original image")
             axs[0].axis("off")
