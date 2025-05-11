@@ -1,5 +1,8 @@
 import numpy as np
+import matplotlib.pyplot as plt
 import cv2
+from pyinpaint import Inpaint
+from my_lib import save_numpy_image_as_png
 
 # SEDC-T
 # https://github.com/ADMAntwerp/ImageCounterfactualExplanations
@@ -63,6 +66,21 @@ class SEDCTCFE:
         # Array to store the difference in probability scores for the target class
         # between the current and original predictions for each segment combination
         P_sets_to_expand_on = np.array([])
+
+        # Check if we have only two unique segments (1 and 2) and if so, return the smaller one
+        # This is to check if pimask segmentation was used
+        # If so, we assume that masked pixels represent one segment and the rest of the image represents another segment
+        # We also assume that masked pixels represent relatively small segment
+        # We care only about this "masked" segment
+        # Of course, there's a better way to check if the segmentation is a pimask segmentation but this is a quick solution
+        unique_segments = np.unique(segments)
+        smaller_segment = float('inf')
+        pimask_used = False
+        if len(unique_segments) == 2 and set(unique_segments) == {1, 2}:
+            segment_1_size = np.sum(segments == 1)
+            segment_2_size = np.sum(segments == 2)
+            smaller_segment = 1 if segment_1_size < segment_2_size else 2
+            pimask_used = True
         
         # Prepare the basis perturbed image based on the selected mode
         if mode == 'mean':
@@ -74,15 +92,30 @@ class SEDCTCFE:
             perturbed_image = cv2.GaussianBlur(image, (31, 31), 0)
         elif mode == 'random':
             perturbed_image = np.random.random(image.shape)
-        elif mode == 'inpaint':
+        elif mode == 'cv2' or mode == 'pyinpaint':
             perturbed_image = np.zeros(image.shape)
-            for j in np.unique(segments):
+            if pimask_used:
+                iterable = [smaller_segment]
+            else:
+                iterable = np.unique(segments)
+            for j in iterable:
                 image_absolute = image
+                image_absolute_path = './tmp/sedct_tmp_image.png'
+                save_numpy_image_as_png(image_absolute, image_absolute_path)
                 mask = np.full([image_absolute.shape[0], image_absolute.shape[1]], 0)
                 mask[segments == j] = 255
                 mask = mask.astype('uint8')
-                image_segment_inpainted = cv2.inpaint(image_absolute, mask, 3, cv2.INPAINT_NS)
-                perturbed_image[segments == j] = image_segment_inpainted[segments == j]
+                mask_path = './tmp/sedct_tmp_mask.png'
+                save_numpy_image_as_png(np.invert(mask), mask_path)
+                if mode == 'cv2':
+                    inpainted = cv2.inpaint(image_absolute, mask, 3, cv2.INPAINT_NS)
+                elif mode == 'pyinpaint':
+                    inpaint = Inpaint(image_absolute_path, mask_path)
+                    inpainted = (inpaint() * 255).astype('uint8')
+                print(inpainted.shape, inpainted.dtype, inpainted.min(), inpainted.max())
+                perturbed_image[segments == j] = inpainted[segments == j]
+            perturbed_image_path = './tmp/sedct_tmp_perturbed.png'
+            save_numpy_image_as_png(perturbed_image, perturbed_image_path)
         
         # Consider each separate segment and check if it changes the prediction to the target class
         # If not, add it to the list of segments to expand on later
@@ -102,6 +135,12 @@ class SEDCTCFE:
             else: 
                 sets_to_expand_on.append([j])
                 P_sets_to_expand_on = np.append(P_sets_to_expand_on, p_new - result[c])
+            
+            if pimask_used:
+                if j == smaller_segment:
+                    plt.imshow(test_image)
+                    plt.axis('off')
+                    plt.show()
         
         iterations = 1
         max_iterations = 10
@@ -154,7 +193,7 @@ class SEDCTCFE:
             iterations += 1
                 
         # Select best explanation, i.e. highest target score increase
-        best_explanation = np.argmax(P - p) 
+        best_explanation = np.argmax(P - p)
         segments_in_explanation = R[best_explanation]
         explanation = np.full([image.shape[0], image.shape[1], image.shape[2]], 0)
         for i in R[best_explanation]:
@@ -162,4 +201,4 @@ class SEDCTCFE:
         perturbation = I[best_explanation]
         new_class = C[best_explanation]
         
-        return explanation, segments_in_explanation, perturbation, new_class 
+        return explanation, segments_in_explanation, perturbation, new_class

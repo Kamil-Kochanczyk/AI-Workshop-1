@@ -9,3 +9,6 @@ results/
 
 # pycache
 src/__pycache__/
+
+# tmp files
+tmp/

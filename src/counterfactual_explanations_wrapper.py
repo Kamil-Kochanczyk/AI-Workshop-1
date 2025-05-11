@@ -265,19 +265,35 @@ class CounterfactualExplanationsWrapper:
 
         segments = None
         while True:
-            # kernel_size = int(input("Enter kernel size (e.g. 1): "))
-            # max_dist = int(input("Enter max_dist (e.g. 100): "))
-            # ratio = float(input("Enter ratio (e.g. 0.75): "))
-            # segments = quickshift(numpy_image, kernel_size=kernel_size, max_dist=max_dist, ratio=ratio)
-
-            n_segments = int(input("Enter the number of segments (e.g. 100): "))
-            compactness = float(input("Enter compactness (try log scale, e.g. 1, 10.0, 100.0): "))
-            segments = slic(numpy_image, n_segments=n_segments, compactness=compactness)
-
-            # scale = int(input("Enter scale (e.g. 10): "))
-            # sigma = float(input("Enter sigma (e.g. 0.95): "))
-            # min_size = int(input("Enter min size (e.g. 5): "))
-            # segments = felzenszwalb(numpy_image, scale=scale, sigma=sigma, min_size=min_size)
+            mode = input("Choose segmentation mode:\nq - quickshift, s - slic, f - felzenszwalb, p - pimask: ").strip().lower()
+            if mode == "q":
+                kernel_size = int(input("Enter kernel size (e.g. 1): "))
+                max_dist = int(input("Enter max_dist (e.g. 100): "))
+                ratio = float(input("Enter ratio (e.g. 0.75): "))
+                segments = quickshift(numpy_image, kernel_size=kernel_size, max_dist=max_dist, ratio=ratio)
+            elif mode == "s":
+                n_segments = int(input("Enter the number of segments (e.g. 100): "))
+                compactness = float(input("Enter compactness (try log scale, e.g. 1, 10.0, 100.0): "))
+                segments = slic(numpy_image, n_segments=n_segments, compactness=compactness)
+            elif mode == "f":
+                scale = int(input("Enter scale (e.g. 10): "))
+                sigma = float(input("Enter sigma (e.g. 0.95): "))
+                min_size = int(input("Enter min size (e.g. 5): "))
+                segments = felzenszwalb(numpy_image, scale=scale, sigma=sigma, min_size=min_size)
+            elif mode == "p":
+                numpy_image_path = "tmp/pimask_image.png"
+                mask_path = "tmp/pimask_mask.png"
+                save_numpy_image_as_png(numpy_image, numpy_image_path)
+                os.system(f"pimask --input {numpy_image_path} --output {mask_path}")
+                binary_mask = plt.imread(mask_path)[:, :, 0].astype(bool)
+                if numpy_image.shape[:2] != binary_mask.shape:
+                    raise ValueError("The binary mask must have the same height and width as the image.")
+                segments = np.zeros(numpy_image.shape[:2], dtype=int)
+                segments[binary_mask] = 1
+                segments[~binary_mask] = 2
+            else:
+                print("Invalid mode selected.")
+                return
 
             print("Number of superpixels: " + str(len(np.unique(segments))))
             print()
@@ -300,7 +316,7 @@ class CounterfactualExplanationsWrapper:
             predict_fn=self.predict_for_sedc_t,
             segments=segments,
             target_class=int(self.cfe_desired_label),    # look for the comment in my_lib.py for function lerp_probabilities
-            mode="inpaint"
+            mode="cv2"
         )
 
         if explanation is None:
@@ -426,7 +442,7 @@ class CounterfactualExplanationsWrapper:
         return label, probabilities
 
 if __name__ == "__main__":
-    cfew = CounterfactualExplanationsWrapper("hazelnut", 0)
+    cfew = CounterfactualExplanationsWrapper("capsule", 0)
     cfew.loop()
     # cfew.perform_algorithm(21, "face")
     del cfew
