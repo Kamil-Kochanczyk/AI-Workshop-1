@@ -35,6 +35,9 @@ class PDFEstimator:
             out = float(np.exp(log_density))
         elif mode == "uniform":
             out = 1 / self.N
+        elif mode == "const_low_pdf":
+            # Made-up, estimated value for anomalies which are not very frequent in real world
+            out = 0.001
         else:
             pass
         print(f"Estimated pdf value: {out}")
@@ -168,12 +171,12 @@ class FACECFE:
         d = self.distance_computer.compute_distance(xi, xj)
         
         if ((d < self.epsilon) and (self.feasibility_set.check_constraints(xi, xj) is True)):
-            self.add_edge(xi, xj, i, j, d)
+            self.add_edge(xi, xj, i, j, d, "uniform")
             return True
         
         return False
     
-    def add_edge(self, xi, xj, i, j, d):
+    def add_edge(self, xi, xj, i, j, d, mode):
         """
         Adds an edge between two vertices in the graph with a weight based on distance and cost.
         Parameters:
@@ -182,9 +185,10 @@ class FACECFE:
             i (int): The index of the first data point.
             j (int): The index of the second data point.
             d (float): The distance between the two data points.
+            mode (str): The mode for estimating the weight cost. Options are "uniform", "kde", or "const_low_pdf".
         """
 
-        wij = d * self.pdf_estimator.estimate_weight_cost_between(xi.flatten(), xj.flatten(), "uniform")
+        wij = d * self.pdf_estimator.estimate_weight_cost_between(xi.flatten(), xj.flatten(), mode)
         
         if (i in self.graph):
             self.graph[i][j] = wij # Add edge to the graph
@@ -276,7 +280,7 @@ class FACECFE:
 
         for i in range(len(self.X_train)):
             xi = self.X_train[i]
-            self.add_edge(xi, source, i, source_vertex_id, self.distance_computer.compute_distance(xi, source))
+            self.add_edge(xi, source, i, source_vertex_id, self.distance_computer.compute_distance(xi, source), "const_low_pdf")
         
         print(f"\nNew vertex added with index {source_vertex_id}")
         print(f"New vertex: {self.graph[source_vertex_id]}")

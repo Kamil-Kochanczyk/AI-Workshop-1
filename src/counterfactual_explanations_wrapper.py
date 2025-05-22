@@ -442,7 +442,7 @@ class CounterfactualExplanationsWrapper:
         return label, probabilities
 
 if __name__ == "__main__":
-    cfew = CounterfactualExplanationsWrapper("capsule", 0)
+    cfew = CounterfactualExplanationsWrapper("hazelnut", 0)
     cfew.loop()
     # cfew.perform_algorithm(21, "face")
     del cfew
